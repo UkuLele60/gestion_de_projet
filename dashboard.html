@@ -170,7 +170,7 @@
         <div class="kpi">
           <div class="box">
             <div class="label">Chansons (filtrées)</div>
-            <div id="kpiCount" class="value">—</div>
+            <div id="kpiCount" class="value">-</div>
           </div>
           <div class="box">
             <div class="label">Département</div>
@@ -381,7 +381,7 @@
     for(const d of opts){
       const opt = document.createElement('option');
       opt.value = d.code;
-      opt.textContent = `${d.code} — ${d.name}`;
+      opt.textContent = `${d.code} - ${d.name}`;
       deptSel.appendChild(opt);
     }
   }
@@ -595,7 +595,7 @@
           const name = String(f.properties?.[DEPT_NAME_FIELD] ?? '');
           if(!code) return;
           setSelectedDept(code, name || code);
-          $('toast').textContent = `Département sélectionné : ${code} — ${name}`;
+          $('toast').textContent = `Département sélectionné : ${code} - ${name}`;
         });
 
         // Click cluster -> zoom in
@@ -794,4 +794,5 @@
 </script>
 </body>
 </html>
+
 
