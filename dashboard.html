@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chansons géolocalisées — Île-de-France</title>
+  <title>Chansons géolocalisées - Île-de-Sons</title>
 
   <!-- MapLibre GL JS (carte style Mapbox-compatible, open source) -->
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
@@ -11,6 +11,9 @@
 
   <!-- Turf.js (géotraitements : point-in-polygon, bbox, etc.) -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <!-- Chart.js (camembert / doughnut) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
     :root{
@@ -62,7 +65,7 @@
     }
     .card{
       border:1px solid var(--line);
-      background:rgba(255,255,255,0.03);
+      background:rgba(255,255,255,0.60);
       border-radius:16px;
       padding:12px;
       margin: 0 0 12px;
@@ -76,7 +79,7 @@
       border:1px solid var(--line);
       border-radius:14px;
       padding:10px;
-      background:rgba(255,255,255,0.02);
+      background:rgba(255,255,255,0.65);
     }
     .kpi .label{ color:var(--muted); font-size:12px; }
     .kpi .value{ font-size:20px; font-weight:700; margin-top:4px; }
@@ -86,7 +89,7 @@
       width:100%;
       border-radius:12px;
       border:1px solid var(--line);
-      background:rgba(0,0,0,0.25);
+      background: rgba(255,255,255,0.75);
       color:var(--text);
       padding:10px 10px;
       outline:none;
@@ -106,16 +109,16 @@
     }
     button{
       border:1px solid var(--line);
-      background:rgba(255,255,255,0.04);
+      background:rgba(255,255,255,0.75);
       color:var(--text);
       padding:10px 12px;
       border-radius:12px;
       cursor:pointer;
       flex:1;
     }
-    button:hover{ border-color:#2f4264; }
-    .danger{ border-color: rgba(251,113,133,0.45); }
-    .danger:hover{ border-color: rgba(251,113,133,0.85); }
+    button:hover{ border-color:#cfc7bf; }
+    .danger{ border-color: rgba(225,29,72,0.35); }
+    .danger:hover{ border-color: rgba(225,29,72,0.75); }
 
     .status{
       font-size:12px;
@@ -142,8 +145,8 @@
       left:12px;
       bottom:12px;
       max-width:420px;
-      background:rgba(10,14,20,0.85);
-      border:1px solid rgba(255,255,255,0.12);
+      background:rgba(255,255,255,0.85);
+      border:1px solid rgba(0,0,0,0.08);
       border-radius:14px;
       padding:10px 12px;
       backdrop-filter: blur(6px);
@@ -162,8 +165,14 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h1>Dashboard - Île-de-Sons </h1>
-            <div class="card">
+      <h1>Dashboard — Chansons géolocalisées (Île-de-France)</h1>
+      <p class="hint">
+        • Clique un département pour filtrer les points.<br/>
+        • Combine librement : département + artiste + style + année.<br/>
+        • Le filtre <b>style</b> est en « contient » (ex: <i>R&B</i> match <i>R&B, Soul</i>).
+      </p>
+
+      <div class="card">
         <div class="kpi">
           <div class="box">
             <div class="label">Chansons (filtrées)</div>
@@ -178,16 +187,20 @@
       </div>
 
       <div class="card">
-       
-        <label for="artist">Artiste</label>
-        <input id="artist" type="text" placeholder="" />
+        <div class="legend">
+          <span><span class="dot"></span> Points = chansons</span>
+          <span style="opacity:.9">Départements = surcouche</span>
+        </div>
+
+        <label for="artist">Artiste (main_artist)</label>
+        <input id="artist" type="text" placeholder="Ex: Aya Nakamura" />
 
         <label for="style">Style (style)</label>
-        <input id="style" type="text" placeholder="" />
+        <input id="style" type="text" placeholder="Ex: R&B" />
 
         <div class="row">
           <div>
-            <label for="year">Année</label>
+            <label for="year">Année (annee)</label>
             <select id="year">
               <option value="">Toutes</option>
             </select>
@@ -209,7 +222,16 @@
       </div>
 
       <div class="card">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+          <div style="font-weight:700;">Répartition des styles</div>
+          <div class="status" id="styleNote" style="margin:0;"></div>
+        </div>
+        <div style="height:240px; margin-top:10px;">
+          <canvas id="styleChart"></canvas>
+        </div>
+        <div class="status" id="styleLegend"></div>
       </div>
+
     </aside>
 
     <main class="map">
@@ -234,8 +256,7 @@
     year: 'annee'
   };
 
-  // Style carto (fond) : on utilise un style public (OpenStreetMap / MapTiler-like).
-  // Si tu as une clé MapTiler, tu peux la remplacer pour un rendu plus joli.
+  // Style carto 
   const BASE_STYLE = 'https://demotiles.maplibre.org/style.json';
 
   // Extent approx IDF
@@ -249,6 +270,8 @@
   let pointsOriginal;    // FeatureCollection
   let pointsWithDept;    // FeatureCollection (points enrichis avec dept_code + dept_name)
   let deptsGeoJSON;      // FeatureCollection
+
+  let styleChart = null; // Chart.js instance
 
   const state = {
     selectedDeptCode: '',
@@ -391,6 +414,9 @@
 
     // Update source data
     map.getSource('points').setData(filtered);
+
+    // Camembert styles
+    updateStyleChartFromFeatures(filtered.features);
 
     // KPI
     $('kpiCount').textContent = String(filtered.features.length);
@@ -579,7 +605,7 @@
           const name = String(f.properties?.[DEPT_NAME_FIELD] ?? '');
           if(!code) return;
           setSelectedDept(code, name || code);
-          $('toast').textContent = `Département sélectionné : ${code} - ${name}`;
+          $('toast').textContent = `Département sélectionné : ${code} — ${name}`;
         });
 
         // Click cluster -> zoom in
@@ -601,7 +627,7 @@
           const artist = p[FIELDS.artist] ?? '—';
           const style = p[FIELDS.style] ?? '—';
           const year = p[FIELDS.year] ?? '—';
-          const dept = p.dept_code ? `${p.dept_code} — ${p.dept_name || ''}` : '—';
+          const dept = p.dept_code ? `${p.dept_code} - ${p.dept_name || ''}` : '—';
 
           const html = `
             <div style="font-family:ui-sans-serif,system-ui; font-size:12px;">
@@ -660,9 +686,121 @@
       .replaceAll("'",'&#039;');
   }
 
+  function parseStyles(styleCell){
+    const s = (styleCell ?? '').toString().trim();
+    if(!s) return [];
+
+    return s
+      .split(',')
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+
+  function computeStyleCounts(features){
+    const counts = new Map();
+    let songsWithAtLeastOneStyle = 0;
+
+    for(const f of features){
+      const styles = parseStyles(f.properties?.[FIELDS.style]);
+      if(styles.length) songsWithAtLeastOneStyle++;
+
+      // Comptage multi-étiquette : +1 par style présent
+      for(const st of styles){
+        const key = st;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+
+      // Variante pondérée (si tu veux que la somme == nb chansons) :
+      // for(const st of styles){
+      //   const key = st;
+      //   counts.set(key, (counts.get(key) || 0) + (1 / styles.length));
+      // }
+    }
+
+    const items = [...counts.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a,b) => b.value - a.value);
+
+    return { items, songsWithAtLeastOneStyle };
+  }
+
+  function ensureStyleChart(){
+    const canvas = document.getElementById('styleChart');
+    if(!canvas) return;
+    if(styleChart) return;
+
+    styleChart = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          // Palette douce (lisible sur thème clair)
+          backgroundColor: [
+            '#d97786','#f59e0b','#34d399','#60a5fa','#a78bfa',
+            '#fb7185','#fbbf24','#4ade80','#93c5fd','#c4b5fd',
+            '#fda4af','#fde68a'
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed;
+                return ` ${ctx.label}: ${v}`;
+              }
+            }
+          }
+        },
+        cutout: '62%'
+      }
+    });
+  }
+
+  function updateStyleChartFromFeatures(filteredFeatures){
+    ensureStyleChart();
+    if(!styleChart) return;
+
+    const { items, songsWithAtLeastOneStyle } = computeStyleCounts(filteredFeatures);
+
+    // Top N + "Autres" pour éviter trop de parts
+    const TOP_N = 8;
+    const top = items.slice(0, TOP_N);
+    const rest = items.slice(TOP_N);
+    const restSum = rest.reduce((acc, x) => acc + x.value, 0);
+
+    const labels = top.map(x => x.label);
+    const data = top.map(x => x.value);
+    if(restSum > 0){
+      labels.push('Autres');
+      data.push(restSum);
+    }
+
+    styleChart.data.labels = labels;
+    styleChart.data.datasets[0].data = data;
+    styleChart.update();
+
+    const totalContrib = items.reduce((acc, x) => acc + x.value, 0);
+    const note = document.getElementById('styleNote');
+    const legend = document.getElementById('styleLegend');
+
+    if(note){
+      note.textContent = `${items.length || 0} styles`;
+    }
+    if(legend){
+      legend.textContent =
+        `Comptage multi-styles : une chanson peut compter pour plusieurs styles. ` +
+        `Contributions styles = ${totalContrib}. Chansons avec ≥1 style = ${songsWithAtLeastOneStyle}.`;
+    }
+  }
+
   init();
 </script>
 </body>
 </html>
-
-
