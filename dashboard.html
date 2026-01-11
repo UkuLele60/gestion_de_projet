@@ -162,14 +162,8 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h1>Dashboard — Chansons géolocalisées (Île-de-France)</h1>
-      <p class="hint">
-        • Clique un département pour filtrer les points.<br/>
-        • Combine librement : département + artiste + style + année.<br/>
-        • Le filtre <b>style</b> est en « contient » (ex: <i>R&B</i> match <i>R&B, Soul</i>).
-      </p>
-
-      <div class="card">
+      <h1>Dashboard - Île-de-Sons </h1>
+            <div class="card">
         <div class="kpi">
           <div class="box">
             <div class="label">Chansons (filtrées)</div>
@@ -184,20 +178,16 @@
       </div>
 
       <div class="card">
-        <div class="legend">
-          <span><span class="dot"></span> Points = chansons</span>
-          <span style="opacity:.9">Départements = surcouche</span>
-        </div>
-
-        <label for="artist">Artiste (main_artist)</label>
-        <input id="artist" type="text" placeholder="Ex: Aya Nakamura" />
+       
+        <label for="artist">Artiste</label>
+        <input id="artist" type="text" placeholder="" />
 
         <label for="style">Style (style)</label>
-        <input id="style" type="text" placeholder="Ex: R&B" />
+        <input id="style" type="text" placeholder="" />
 
         <div class="row">
           <div>
-            <label for="year">Année (annee)</label>
+            <label for="year">Année</label>
             <select id="year">
               <option value="">Toutes</option>
             </select>
@@ -219,11 +209,6 @@
       </div>
 
       <div class="card">
-        <div class="status">
-          <b>Fichiers attendus (dans le même dossier que ce HTML)</b><br/>
-          • <code>points.geojson</code> : FeatureCollection de points (lon/lat WGS84) avec propriétés <code>main_artist</code>, <code>style</code>, <code>annee</code> (et ce que tu veux).<br/>
-          • <code>departements.geojson</code> : polygones des départements IDF avec une propriété code/nom (voir config plus bas).
-        </div>
       </div>
     </aside>
 
@@ -239,8 +224,8 @@
    **********************/
   // Propriétés attendues dans le GeoJSON départements
   // Ajuste ces champs si tes polygones utilisent d'autres noms.
-  const DEPT_CODE_FIELD = 'code';   // ex: "75", "77", "78", "91", "92", "93", "94", "95"
-  const DEPT_NAME_FIELD = 'nom';    // ex: "Paris", "Seine-et-Marne", ...
+  const DEPT_CODE_FIELD = 'INSEE_DEP';   // ex: "75", "77", "78", "91", "92", "93", "94", "95"
+  const DEPT_NAME_FIELD = 'NOM';    // ex: "Paris", "Seine-et-Marne", ...
 
   // Champs attendus dans le GeoJSON points
   const FIELDS = {
@@ -679,3 +664,4 @@
 </script>
 </body>
 </html>
+
