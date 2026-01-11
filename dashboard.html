@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chansons géolocalisées — Île-de-France</title>
+
+  <!-- MapLibre GL JS (carte style Mapbox-compatible, open source) -->
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <!-- Turf.js (géotraitements : point-in-polygon, bbox, etc.) -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f7f5f2;              /* beige clair */
+      --panel:#ffffff;          /* blanc */
+      --panel2:#f3eee9;         /* beige rosé */
+      --text:#2b2b2b;           /* texte sombre doux */
+      --muted:#6b6b6b;          /* texte secondaire */
+      --line:#e2ddd7;           /* séparateurs */
+      --accent:#d97786;         /* rose doux */
+      --danger:#e11d48;         /* rose/rouge */
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .app{
+      display:grid;
+      grid-template-columns: 360px 1fr;
+      height:100vh;
+      width:100vw;
+    }
+    .sidebar{
+      border-right:1px solid var(--line);
+      background:linear-gradient(180deg, var(--panel), var(--panel2));
+      padding:16px;
+      overflow:auto;
+    }
+    .map{
+      position:relative;
+    }
+    #map{
+      position:absolute;
+      inset:0;
+    }
+    h1{
+      font-size:16px;
+      margin:0 0 10px;
+      letter-spacing:.2px;
+    }
+    .hint{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+      margin:0 0 14px;
+    }
+    .card{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,0.03);
+      border-radius:16px;
+      padding:12px;
+      margin: 0 0 12px;
+    }
+    .kpi{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .kpi .box{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      background:rgba(255,255,255,0.02);
+    }
+    .kpi .label{ color:var(--muted); font-size:12px; }
+    .kpi .value{ font-size:20px; font-weight:700; margin-top:4px; }
+
+    label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 6px; }
+    input, select{
+      width:100%;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(0,0,0,0.25);
+      color:var(--text);
+      padding:10px 10px;
+      outline:none;
+    }
+    input::placeholder{ color:#7f8aa0; }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+
+    .btns{
+      display:flex;
+      gap:10px;
+      margin-top:12px;
+    }
+    button{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,0.04);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      flex:1;
+    }
+    button:hover{ border-color:#2f4264; }
+    .danger{ border-color: rgba(251,113,133,0.45); }
+    .danger:hover{ border-color: rgba(251,113,133,0.85); }
+
+    .status{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:8px;
+      line-height:1.45;
+    }
+
+    .legend{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      display:inline-block; margin-right:6px; vertical-align:middle;
+      background:var(--accent);
+    }
+
+    .toast{
+      position:absolute;
+      left:12px;
+      bottom:12px;
+      max-width:420px;
+      background:rgba(10,14,20,0.85);
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:14px;
+      padding:10px 12px;
+      backdrop-filter: blur(6px);
+      font-size:12px;
+      color:var(--muted);
+      pointer-events:none;
+    }
+
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr; grid-template-rows: 360px 1fr; }
+      .sidebar{ border-right:none; border-bottom:1px solid var(--line); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>Dashboard — Chansons géolocalisées (Île-de-France)</h1>
+      <p class="hint">
+        • Clique un département pour filtrer les points.<br/>
+        • Combine librement : département + artiste + style + année.<br/>
+        • Le filtre <b>style</b> est en « contient » (ex: <i>R&B</i> match <i>R&B, Soul</i>).
+      </p>
+
+      <div class="card">
+        <div class="kpi">
+          <div class="box">
+            <div class="label">Chansons (filtrées)</div>
+            <div id="kpiCount" class="value">—</div>
+          </div>
+          <div class="box">
+            <div class="label">Département</div>
+            <div id="kpiDept" class="value" style="font-size:14px; font-weight:700; margin-top:8px;">Tous</div>
+          </div>
+        </div>
+        <div class="status" id="kpiStatus">Chargement…</div>
+      </div>
+
+      <div class="card">
+        <div class="legend">
+          <span><span class="dot"></span> Points = chansons</span>
+          <span style="opacity:.9">Départements = surcouche</span>
+        </div>
+
+        <label for="artist">Artiste (main_artist)</label>
+        <input id="artist" type="text" placeholder="Ex: Aya Nakamura" />
+
+        <label for="style">Style (style)</label>
+        <input id="style" type="text" placeholder="Ex: R&B" />
+
+        <div class="row">
+          <div>
+            <label for="year">Année (annee)</label>
+            <select id="year">
+              <option value="">Toutes</option>
+            </select>
+          </div>
+          <div>
+            <label for="deptSelect">Département</label>
+            <select id="deptSelect">
+              <option value="">Tous</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="btns">
+          <button id="reset">Réinitialiser</button>
+          <button id="clearDept" class="danger">Dé-sélectionner département</button>
+        </div>
+
+        <div class="status" id="filterStatus"></div>
+      </div>
+
+      <div class="card">
+        <div class="status">
+          <b>Fichiers attendus (dans le même dossier que ce HTML)</b><br/>
+          • <code>points.geojson</code> : FeatureCollection de points (lon/lat WGS84) avec propriétés <code>main_artist</code>, <code>style</code>, <code>annee</code> (et ce que tu veux).<br/>
+          • <code>departements.geojson</code> : polygones des départements IDF avec une propriété code/nom (voir config plus bas).
+        </div>
+      </div>
+    </aside>
+
+    <main class="map">
+      <div id="map"></div>
+      <div class="toast" id="toast">Astuce : clique sur un département pour filtrer les points.</div>
+    </main>
+  </div>
+
+<script>
+  /**********************
+   * CONFIG
+   **********************/
+  // Propriétés attendues dans le GeoJSON départements
+  // Ajuste ces champs si tes polygones utilisent d'autres noms.
+  const DEPT_CODE_FIELD = 'code';   // ex: "75", "77", "78", "91", "92", "93", "94", "95"
+  const DEPT_NAME_FIELD = 'nom';    // ex: "Paris", "Seine-et-Marne", ...
+
+  // Champs attendus dans le GeoJSON points
+  const FIELDS = {
+    artist: 'main_artist',
+    style: 'style',
+    year: 'annee'
+  };
+
+  // Style carto (fond) : on utilise un style public (OpenStreetMap / MapTiler-like).
+  // Si tu as une clé MapTiler, tu peux la remplacer pour un rendu plus joli.
+  const BASE_STYLE = 'https://demotiles.maplibre.org/style.json';
+
+  // Extent approx IDF
+  const IDF_CENTER = [2.35, 48.85];
+  const IDF_ZOOM = 9;
+
+  /**********************
+   * STATE
+   **********************/
+  let map;
+  let pointsOriginal;    // FeatureCollection
+  let pointsWithDept;    // FeatureCollection (points enrichis avec dept_code + dept_name)
+  let deptsGeoJSON;      // FeatureCollection
+
+  const state = {
+    selectedDeptCode: '',
+    selectedDeptName: 'Tous',
+    artistQuery: '',
+    styleQuery: '',
+    year: ''
+  };
+
+  /**********************
+   * HELPERS
+   **********************/
+  function $(id){ return document.getElementById(id); }
+
+  function normalize(str){
+    return (str ?? '').toString().trim().toLowerCase();
+  }
+
+  function styleMatches(styleCell, query){
+    const q = normalize(query);
+    if(!q) return true;
+    const s = normalize(styleCell);
+    if(!s) return false;
+
+    // Match "contient" sur chaque token séparé par virgule
+    // (et aussi sur la chaîne complète, au cas où)
+    if (s.includes(q)) return true;
+
+    const tokens = s.split(',').map(x => x.trim()).filter(Boolean);
+    return tokens.some(t => t.includes(q));
+  }
+
+  function artistMatches(artistCell, query){
+    const q = normalize(query);
+    if(!q) return true;
+    const a = normalize(artistCell);
+    if(!a) return false;
+    return a.includes(q);
+  }
+
+  function yearMatches(yearCell, yearSelected){
+    if(!yearSelected) return true;
+    if(yearCell === null || yearCell === undefined) return false;
+    return String(yearCell) === String(yearSelected);
+  }
+
+  function deptMatches(props, deptCode){
+    if(!deptCode) return true;
+    return String(props.dept_code) === String(deptCode);
+  }
+
+  function computeDeptForPoints(pointsFC, deptsFC){
+    // Optimisation légère : on calcule bbox pour chaque dept
+    const deptPolys = deptsFC.features.map(f => {
+      const bbox = turf.bbox(f);
+      return { feature: f, bbox };
+    });
+
+    const out = {
+      type: 'FeatureCollection',
+      features: pointsFC.features.map(pt => {
+        const p = pt.geometry.coordinates;
+        const props = { ...(pt.properties || {}) };
+
+        let foundCode = '';
+        let foundName = '';
+
+        for(const d of deptPolys){
+          const [minX, minY, maxX, maxY] = d.bbox;
+          if(p[0] < minX || p[0] > maxX || p[1] < minY || p[1] > maxY) continue;
+
+          if(turf.booleanPointInPolygon(pt, d.feature)){
+            foundCode = d.feature.properties?.[DEPT_CODE_FIELD] ?? '';
+            foundName = d.feature.properties?.[DEPT_NAME_FIELD] ?? '';
+            break;
+          }
+        }
+
+        props.dept_code = String(foundCode);
+        props.dept_name = String(foundName);
+
+        return { ...pt, properties: props };
+      })
+    };
+    return out;
+  }
+
+  function buildYearOptions(pointsFC){
+    const years = new Set();
+    for(const f of pointsFC.features){
+      const y = f.properties?.[FIELDS.year];
+      if(y !== null && y !== undefined && String(y).trim() !== '') years.add(String(y));
+    }
+    const sorted = [...years].sort((a,b) => Number(a) - Number(b));
+
+    const yearSel = $('year');
+    yearSel.innerHTML = '<option value="">Toutes</option>';
+    for(const y of sorted){
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+
+  function buildDeptOptions(deptsFC){
+    const opts = deptsFC.features
+      .map(f => ({
+        code: String(f.properties?.[DEPT_CODE_FIELD] ?? ''),
+        name: String(f.properties?.[DEPT_NAME_FIELD] ?? '')
+      }))
+      .filter(x => x.code)
+      .sort((a,b) => a.code.localeCompare(b.code, 'fr'));
+
+    const deptSel = $('deptSelect');
+    deptSel.innerHTML = '<option value="">Tous</option>';
+    for(const d of opts){
+      const opt = document.createElement('option');
+      opt.value = d.code;
+      opt.textContent = `${d.code} — ${d.name}`;
+      deptSel.appendChild(opt);
+    }
+  }
+
+  function applyFilters(){
+    if(!pointsWithDept) return;
+
+    const filtered = {
+      type:'FeatureCollection',
+      features: pointsWithDept.features.filter(f => {
+        const props = f.properties || {};
+        return (
+          deptMatches(props, state.selectedDeptCode) &&
+          artistMatches(props[FIELDS.artist], state.artistQuery) &&
+          styleMatches(props[FIELDS.style], state.styleQuery) &&
+          yearMatches(props[FIELDS.year], state.year)
+        );
+      })
+    };
+
+    // Update source data
+    map.getSource('points').setData(filtered);
+
+    // KPI
+    $('kpiCount').textContent = String(filtered.features.length);
+    $('kpiDept').textContent = state.selectedDeptName || 'Tous';
+
+    // Feedback
+    const parts = [];
+    if(state.selectedDeptCode) parts.push(`département ${state.selectedDeptCode}`);
+    if(state.artistQuery) parts.push(`artiste ≈ “${state.artistQuery}”`);
+    if(state.styleQuery) parts.push(`style contient “${state.styleQuery}”`);
+    if(state.year) parts.push(`année = ${state.year}`);
+
+    $('filterStatus').textContent = parts.length ? `Filtres actifs : ${parts.join(' · ')}` : 'Aucun filtre actif.';
+  }
+
+  function setSelectedDept(code, name){
+    state.selectedDeptCode = code || '';
+    state.selectedDeptName = name || 'Tous';
+    $('deptSelect').value = state.selectedDeptCode;
+    applyFilters();
+
+    // Highlight polygone sélectionné
+    map.setFilter('depts-outline-selected', state.selectedDeptCode ? ['==', ['get', DEPT_CODE_FIELD], state.selectedDeptCode] : ['==', ['get', DEPT_CODE_FIELD], '__none__']);
+  }
+
+  function resetAll(){
+    state.selectedDeptCode = '';
+    state.selectedDeptName = 'Tous';
+    state.artistQuery = '';
+    state.styleQuery = '';
+    state.year = '';
+
+    $('artist').value = '';
+    $('style').value = '';
+    $('year').value = '';
+    $('deptSelect').value = '';
+
+    setSelectedDept('', 'Tous');
+    applyFilters();
+  }
+
+  async function loadJSON(url){
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`Impossible de charger ${url} (${res.status})`);
+    return await res.json();
+  }
+
+  function fitToDepts(deptsFC){
+    const bbox = turf.bbox(deptsFC);
+    map.fitBounds([[bbox[0], bbox[1]],[bbox[2], bbox[3]]], { padding: 30, duration: 600 });
+  }
+
+  /**********************
+   * INIT MAP
+   **********************/
+  async function init(){
+    try{
+      $('kpiStatus').textContent = 'Chargement des GeoJSON…';
+
+      // 1) Load data
+      const [points, depts] = await Promise.all([
+        loadJSON('./points.geojson'),
+        loadJSON('./departements.geojson')
+      ]);
+      pointsOriginal = points;
+      deptsGeoJSON = depts;
+
+      // 2) Enrich points with department code
+      $('kpiStatus').textContent = 'Association points → départements (point-in-polygon)…';
+      pointsWithDept = computeDeptForPoints(pointsOriginal, deptsGeoJSON);
+
+      // 3) Build filters options
+      buildYearOptions(pointsWithDept);
+      buildDeptOptions(deptsGeoJSON);
+
+      // 4) Create map
+      $('kpiStatus').textContent = 'Initialisation de la carte…';
+      map = new maplibregl.Map({
+        container: 'map',
+        style: BASE_STYLE,
+        center: IDF_CENTER,
+        zoom: IDF_ZOOM
+      });
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+      map.on('load', () => {
+        // Sources
+        map.addSource('depts', { type:'geojson', data: deptsGeoJSON });
+        map.addSource('points', { type:'geojson', data: pointsWithDept, cluster: true, clusterRadius: 40, clusterMaxZoom: 12 });
+
+        // Départements (fill)
+        map.addLayer({
+          id: 'depts-fill',
+          type: 'fill',
+          source: 'depts',
+          paint: {
+            'fill-opacity': 0.25,
+            'fill-color': '#94a3b8'
+          }
+        });
+
+        // Départements (outline)
+        map.addLayer({
+          id: 'depts-outline',
+          type: 'line',
+          source: 'depts',
+          paint: {
+            'line-opacity': 0.65,
+            'line-width': 1.2,
+            'line-color': '#cbd5e1'
+          }
+        });
+
+        // Outline sélectionné
+        map.addLayer({
+          id: 'depts-outline-selected',
+          type: 'line',
+          source: 'depts',
+          filter: ['==', ['get', DEPT_CODE_FIELD], '__none__'],
+          paint: {
+            'line-opacity': 1,
+            'line-width': 3,
+            'line-color': '#7dd3fc'
+          }
+        });
+
+        // Clusters
+        map.addLayer({
+          id: 'clusters',
+          type: 'circle',
+          source: 'points',
+          filter: ['has', 'point_count'],
+          paint: {
+            'circle-radius': [
+              'step',
+              ['get', 'point_count'],
+              14, 50, 18, 200, 22, 1000, 26
+            ],
+            'circle-opacity': 0.85,
+            'circle-color': '#60a5fa'
+          }
+        });
+
+        map.addLayer({
+          id: 'cluster-count',
+          type: 'symbol',
+          source: 'points',
+          filter: ['has', 'point_count'],
+          layout: {
+            'text-field': ['get', 'point_count_abbreviated'],
+            'text-size': 12
+          },
+          paint: {
+            'text-color': '#0b0f14'
+          }
+        });
+
+        // Points (unclustered)
+        map.addLayer({
+          id: 'unclustered-point',
+          type: 'circle',
+          source: 'points',
+          filter: ['!', ['has', 'point_count']],
+          paint: {
+            'circle-radius': 4,
+            'circle-opacity': 0.9,
+            'circle-color': '#7dd3fc',
+            'circle-stroke-width': 0.8,
+            'circle-stroke-color': '#0b0f14'
+          }
+        });
+
+        // Hover cursor
+        map.on('mouseenter', 'depts-fill', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'depts-fill', () => map.getCanvas().style.cursor = '');
+        map.on('mouseenter', 'unclustered-point', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'unclustered-point', () => map.getCanvas().style.cursor = '');
+        map.on('mouseenter', 'clusters', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'clusters', () => map.getCanvas().style.cursor = '');
+
+        // Click dept -> select
+        map.on('click', 'depts-fill', (e) => {
+          const f = e.features?.[0];
+          if(!f) return;
+          const code = String(f.properties?.[DEPT_CODE_FIELD] ?? '');
+          const name = String(f.properties?.[DEPT_NAME_FIELD] ?? '');
+          if(!code) return;
+          setSelectedDept(code, name || code);
+          $('toast').textContent = `Département sélectionné : ${code} — ${name}`;
+        });
+
+        // Click cluster -> zoom in
+        map.on('click', 'clusters', (e) => {
+          const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+          const clusterId = features[0].properties.cluster_id;
+          map.getSource('points').getClusterExpansionZoom(clusterId, (err, zoom) => {
+            if(err) return;
+            map.easeTo({ center: features[0].geometry.coordinates, zoom: zoom + 0.5 });
+          });
+        });
+
+        // Click point -> popup
+        map.on('click', 'unclustered-point', (e) => {
+          const f = e.features?.[0];
+          if(!f) return;
+          const p = f.properties || {};
+
+          const artist = p[FIELDS.artist] ?? '—';
+          const style = p[FIELDS.style] ?? '—';
+          const year = p[FIELDS.year] ?? '—';
+          const dept = p.dept_code ? `${p.dept_code} — ${p.dept_name || ''}` : '—';
+
+          const html = `
+            <div style="font-family:ui-sans-serif,system-ui; font-size:12px;">
+              <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${escapeHTML(artist)}</div>
+              <div><b>Style</b> : ${escapeHTML(style)}</div>
+              <div><b>Année</b> : ${escapeHTML(year)}</div>
+              <div><b>Département</b> : ${escapeHTML(dept)}</div>
+            </div>
+          `;
+
+          new maplibregl.Popup({ closeButton: true, closeOnClick: true })
+            .setLngLat(e.lngLat)
+            .setHTML(html)
+            .addTo(map);
+        });
+
+        fitToDepts(deptsGeoJSON);
+
+        // Init KPIs
+        $('kpiStatus').textContent = `Données prêtes : ${pointsWithDept.features.length} points (avant filtres).`;
+        $('kpiCount').textContent = String(pointsWithDept.features.length);
+
+        // Wire UI events
+        $('artist').addEventListener('input', (ev) => { state.artistQuery = ev.target.value; applyFilters(); });
+        $('style').addEventListener('input', (ev) => { state.styleQuery = ev.target.value; applyFilters(); });
+        $('year').addEventListener('change', (ev) => { state.year = ev.target.value; applyFilters(); });
+        $('deptSelect').addEventListener('change', (ev) => {
+          const code = ev.target.value;
+          if(!code){ setSelectedDept('', 'Tous'); return; }
+          // Look up name from dept layer
+          const deptFeat = deptsGeoJSON.features.find(f => String(f.properties?.[DEPT_CODE_FIELD] ?? '') === String(code));
+          const name = deptFeat?.properties?.[DEPT_NAME_FIELD] ?? code;
+          setSelectedDept(code, name);
+        });
+
+        $('reset').addEventListener('click', resetAll);
+        $('clearDept').addEventListener('click', () => setSelectedDept('', 'Tous'));
+
+        // First apply
+        applyFilters();
+      });
+
+    } catch(err){
+      console.error(err);
+      $('kpiStatus').textContent = `Erreur : ${err.message}`;
+      $('kpiStatus').style.color = 'var(--danger)';
+    }
+  }
+
+  function escapeHTML(val){
+    return String(val)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'",'&#039;');
+  }
+
+  init();
+</script>
+</body>
+</html>
