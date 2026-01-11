@@ -579,7 +579,7 @@
           const name = String(f.properties?.[DEPT_NAME_FIELD] ?? '');
           if(!code) return;
           setSelectedDept(code, name || code);
-          $('toast').textContent = `Département sélectionné : ${code} — ${name}`;
+          $('toast').textContent = `Département sélectionné : ${code} - ${name}`;
         });
 
         // Click cluster -> zoom in
@@ -664,4 +664,5 @@
 </script>
 </body>
 </html>
+
 
