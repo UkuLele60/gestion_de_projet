@@ -165,14 +165,8 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h1>Dashboard — Chansons géolocalisées (Île-de-France)</h1>
-      <p class="hint">
-        • Clique un département pour filtrer les points.<br/>
-        • Combine librement : département + artiste + style + année.<br/>
-        • Le filtre <b>style</b> est en « contient » (ex: <i>R&B</i> match <i>R&B, Soul</i>).
-      </p>
-
-      <div class="card">
+      <h1>Dashboard - Île-de-Sons</h1>
+            <div class="card">
         <div class="kpi">
           <div class="box">
             <div class="label">Chansons (filtrées)</div>
@@ -187,20 +181,16 @@
       </div>
 
       <div class="card">
-        <div class="legend">
-          <span><span class="dot"></span> Points = chansons</span>
-          <span style="opacity:.9">Départements = surcouche</span>
-        </div>
+      
+        <label for="artist">Artiste</label>
+        <input id="artist" type="text" placeholder="" />
 
-        <label for="artist">Artiste (main_artist)</label>
-        <input id="artist" type="text" placeholder="Ex: Aya Nakamura" />
-
-        <label for="style">Style (style)</label>
-        <input id="style" type="text" placeholder="Ex: R&B" />
+        <label for="style">Style</label>
+        <input id="style" type="text" placeholder="" />
 
         <div class="row">
           <div>
-            <label for="year">Année (annee)</label>
+            <label for="year">Année</label>
             <select id="year">
               <option value="">Toutes</option>
             </select>
@@ -624,10 +614,10 @@
           if(!f) return;
           const p = f.properties || {};
 
-          const artist = p[FIELDS.artist] ?? '—';
-          const style = p[FIELDS.style] ?? '—';
-          const year = p[FIELDS.year] ?? '—';
-          const dept = p.dept_code ? `${p.dept_code} - ${p.dept_name || ''}` : '—';
+          const artist = p[FIELDS.artist] ?? '-';
+          const style = p[FIELDS.style] ?? '-';
+          const year = p[FIELDS.year] ?? '-';
+          const dept = p.dept_code ? `${p.dept_code} - ${p.dept_name || ''}` : '-';
 
           const html = `
             <div style="font-family:ui-sans-serif,system-ui; font-size:12px;">
@@ -804,3 +794,4 @@
 </script>
 </body>
 </html>
+
